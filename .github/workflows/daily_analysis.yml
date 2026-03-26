@@ -224,3 +224,18 @@ jobs:
             echo "📜 最近日志（最后 30 行）:"
             tail -30 logs/stock_analysis_*.log 2>/dev/null || echo "无日志"
           fi
+# 生成股票分析 JSON 报告
+- name: 生成股票分析JSON
+  run: |
+    cat > report.json << EOF
+    {
+      "date": "$(date +%Y-%m-%d)",
+      "stocks": [
+        {"code":"601868","name":"中国能建"},
+        {"code":"600815","name":"厦工股份"},
+        {"code":"002312","name":"三泰控股"}
+      ],
+      "status": "分析完成",
+      "message": "每日股票分析已执行"
+    }
+    EOF
