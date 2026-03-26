@@ -195,19 +195,7 @@ jobs:
           else
             python main.py
           fi
-      - name: 生成股票分析JSON
-  run: |
-    cat > stock_analysis.json << EOF
-    {
-      "report_time": "$(date +%Y-%m-%d %H:%M:%S)",
-      "stocks": [
-        {"code": "601868", "name": "中国能建", "price": null, "change": null, "analysis": "待补充"},
-        {"code": "600815", "name": "厦工股份", "price": null, "change": null, "analysis": "待补充"},
-        {"code": "002312", "name": "三泰控股", "price": null, "change": null, "analysis": "待补充"}
-      ],
-      "summary": "每日股票分析执行完成"
-    }
-    EOF
+      
       - name: 上传分析报告
         uses: actions/upload-artifact@v4
         if: always()
