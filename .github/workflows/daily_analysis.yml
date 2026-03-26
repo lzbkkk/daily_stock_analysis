@@ -22,50 +22,32 @@ concurrency:
 jobs:
   analyze:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     permissions:
-      contents: write  # 必须！用于上传Release
+      contents: write
 
     steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: 设置Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: 创建reports目录
-        run: mkdir -p reports
+      - run: mkdir -p reports
 
-      - name: 运行并生成JSON
+      - name: 生成 JSON
         run: python main.py
 
-      # =========================================
-      # 【核心】删除旧Release，只保留最新
-      # =========================================
-      - name: 删除旧的Release
-        run: |
-          gh release delete latest-stock-report -y 2>/dev/null || true
-          git push origin --delete latest-stock-report 2>/dev/null || true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # =========================================
-      # ✅ 上传 JSON 作为独立附件到 Release
-      # =========================================
-      - name: 上传JSON到GitHub Release
+      - name: 上传 JSON 到 Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-stock-report
-          name: 📊 最新股票分析报告
-          body: 自动生成的股票分析JSON数据
-          files: reports/stock_analysis_latest.json  # 只上传这个JSON！
+          name: "📊 最新股票分析报告"
+          body: "股票分析 JSON 数据"
+          files: reports/stock_analysis_latest.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 上传日志包
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: reports
           path: reports/
