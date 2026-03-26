@@ -224,6 +224,7 @@ jobs:
             echo "📜 最近日志（最后 30 行）:"
             tail -30 logs/stock_analysis_*.log 2>/dev/null || echo "无日志"
           fi
+# 生成股票分析结果JSON文件（仅保存，不推送）
 - name: 生成股票分析JSON
   run: |
     cat > analysis_result.json << EOF
