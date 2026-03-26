@@ -27,49 +27,35 @@ jobs:
       contents: write
 
     steps:
-      - name: 随机延迟
-        run: sleep $((RANDOM % 60))
+      - uses: actions/checkout@v4
 
-      - name: 检出代码
-        uses: actions/checkout@v4
-
-      - name: 设置 Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: 安装依赖
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt || true
+      - run: pip install -r requirements.txt || true
 
-      - name: 安装工具
-        run: sudo apt-get update && sudo apt-get install -y jq gh
+      - run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: 创建目录
-        run: mkdir -p data logs reports
+      - run: mkdir -p data logs reports
 
-      - name: 执行分析 + 生成JSON
+      - name: 执行分析并生成 JSON
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3-flash-preview' }}
-          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
-          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-          WECHAT_WEBHOOK_URL: ${{ secrets.WECHAT_WEBHOOK }}
-          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
           STOCK_LIST: ${{ vars.STOCK_LIST || secrets.STOCK_LIST || '600519' }}
           REPORT_TYPE: ${{ vars.REPORT_TYPE || 'simple' }}
           RUN_MODE: ${{ github.event.inputs.mode || 'full' }}
-
         run: |
           export TZ=Asia/Shanghai
-          echo "=========================================="
-          echo "🚀 开始分析"
-          echo "=========================================="
-
-          # 运行主程序（自动生成JSON）
           python main.py
+
+      - name: 上传到 Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reports
+          path: reports/
+          retention-days: 30
 
       - name: 删除旧 Release
         run: |
@@ -78,27 +64,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 上传最新 JSON 到 Release
+      - name: 上传到 GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-stock-report
           name: "📊 最新股票分析报告"
-          body: |
-            自动更新 · 仅保留最新
-            📅 更新时间：${{ env.DATE }}
-            📊 模式：${{ github.event.inputs.mode || 'full' }}
+          body: "仅保留最新报告"
           files: reports/*.json
-          draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 上传日志
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: reports
-          path: |
-            reports/
-            logs/
-          retention-days: 30
