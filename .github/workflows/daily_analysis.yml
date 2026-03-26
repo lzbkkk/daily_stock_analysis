@@ -24,7 +24,9 @@ jobs:
   analyze:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    
+    permissions:
+      contents: write  # 必须：用于删除/创建 Release
+      
     steps:
       - name: 随机延迟
         run: sleep $((RANDOM % 60))
@@ -43,13 +45,13 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
       
-      - name: 安装 jq（修复 JSON 生成依赖）
-        run: sudo apt-get update && sudo apt-get install -y jq
+      - name: 安装 jq & gh
+        run: sudo apt-get update && sudo apt-get install -y jq gh
       
       - name: 创建目录
         run: mkdir -p data logs reports
       
-      - name: 执行分析
+      - name: 执行分析 + 生成JSON
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3-flash-preview' }}
@@ -106,11 +108,8 @@ jobs:
           export TZ=Asia/Shanghai
           DATE=$(date +%Y%m%d)
           TIME=$(date +%H%M%S)
-          
-          echo "=========================================="
-          echo "🚀 A股分析开始"
-          echo "=========================================="
-          
+          JSON_FILE="reports/stock_analysis_latest.json"
+
           # 运行分析
           if [ "$MODE" = "market-only" ]; then
             python main.py --market-review
@@ -120,7 +119,7 @@ jobs:
             python main.py
           fi
 
-          # 生成 JSON 报告
+          # 生成固定文件名的 JSON（方便覆盖）
           jq -n \
             --arg date "$(date +%Y-%m-%d)" \
             --arg time "$(date +%H:%M:%S)" \
@@ -138,11 +137,39 @@ jobs:
               run_status: $status,
               github_run_id: "${{ github.run_id }}",
               github_run_number: "${{ github.run_number }}"
-            }' > reports/analysis_result_${DATE}_${TIME}.json
+            }' > $JSON_FILE
 
-          echo "✅ JSON 报告已生成：reports/analysis_result_${DATE}_${TIME}.json"
+          echo "✅ JSON 已生成：$JSON_FILE"
       
-      - name: 上传所有报告（包含JSON）
+      # ==============================================
+      # ✅ 关键：删除所有旧 Release，只留最新
+      # ==============================================
+      - name: 删除所有旧的 Release
+        run: |
+          gh release delete "latest-stock-report" -y || true
+          git push origin --delete "latest-stock-report" || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      # ==============================================
+      # ✅ 上传最新 JSON 到 Release
+      # ==============================================
+      - name: 创建最新 Release 并上传JSON
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "latest-stock-report"  # 固定标签，永远最新
+          name: "📊 最新股票分析报告"
+          body: |
+            自动更新 · 仅保留最新报告
+            📅 更新时间：${{ env.DATE }} $(date +%H:%M)
+            📊 运行模式：${{ github.event.inputs.mode || 'full' }}
+          files: reports/*.json
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: 上传报告与日志
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -151,15 +178,3 @@ jobs:
             reports/
             logs/
           retention-days: 30
-      
-      - name: 显示结果
-        if: always()
-        run: |
-          echo ""
-          echo "=========================================="
-          echo "📊 分析完成"
-          echo "=========================================="
-          ls -la reports/
-          echo ""
-          echo "📜 最近日志"
-          tail -30 logs/stock_analysis_*.log 2>/dev/null || echo "无日志"
