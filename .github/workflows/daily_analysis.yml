@@ -23,7 +23,7 @@ concurrency:
 jobs:
   analyze:
     runs-on: ubuntu-latest
-    timeout-minutes:30
+    timeout-minutes: 30
     
     steps:
       - name: 随机延迟
@@ -42,6 +42,9 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
+      
+      - name: 安装 jq（修复 JSON 生成依赖）
+        run: sudo apt-get update && sudo apt-get install -y jq
       
       - name: 创建目录
         run: mkdir -p data logs reports
@@ -117,10 +120,8 @@ jobs:
             python main.py
           fi
 
-          # ==============================================
-          # ✅ 这里：运行完成后自动生成 JSON 报告
-          # ==============================================
-          echo "{}" | jq \
+          # 生成 JSON 报告
+          jq -n \
             --arg date "$(date +%Y-%m-%d)" \
             --arg time "$(date +%H:%M:%S)" \
             --arg mode "$MODE" \
