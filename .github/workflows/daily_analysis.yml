@@ -1,11 +1,8 @@
 name: 每日股票分析
 
 on:
-  # 定时触发 - 周一至周五 北京时间 9:00
   schedule:
-    - cron: '0 1 * * 1-5'     # UTC 1:00 = 北京时间 9:00（原 cron 错误已修复）
-  
-  # 手动触发
+    - cron: '0 1 * * 1-5'   # UTC 1:00 = 北京时间 9:00（周一至周五）
   workflow_dispatch:
     inputs:
       mode:
@@ -14,11 +11,13 @@ on:
         default: 'full'
         type: choice
         options:
-          - full          # 完整分析（股票+大盘）
-          - market-only   # 仅大盘复盘
-          - stocks-only   # 仅股票分析
+          - full
+          - market-only
+          - stocks-only
 
-# 并发控制：同一时间只运行一个分析任务
+permissions:
+  contents: read
+
 concurrency:
   group: stock-analysis
   cancel-in-progress: false
@@ -30,129 +29,53 @@ jobs:
     defaults:
       run:
         shell: bash
-    
+
     steps:
       - name: 随机延迟（防风控）
-        run: sleep $((RANDOM % 60))
-      
+        run: sleep $((RANDOM % 60))  # 0-60秒随机延迟，避免固定时间访问
+
       - name: 检出代码
         uses: actions/checkout@v4
-      
-      - name: 设置 Python 环境
+
+      - name: 设置Python环境
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-      
+
       - name: 安装依赖
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      
-      - name: 创建目录
+
+      - name: 创建必要目录
         run: mkdir -p data logs reports
-      
+
       - name: 执行股票分析
         env:
-          # AI 配置
+          TZ: Asia/Shanghai  # 统一时区为北京时间
+          # AI配置
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3-flash-preview' }}
-          GEMINI_MODEL_FALLBACK: ${{ vars.GEMINI_MODEL_FALLBACK || 'gemini-2.5-flash' }}
-          GEMINI_REQUEST_DELAY: '3.0'
-          
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL || secrets.OPENAI_BASE_URL }}
-          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || secrets.OPENAI_MODEL }}
-          
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
           # 数据源
           TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
-          
-          # 搜索服务
-          BOCHA_API_KEYS: ${{ secrets.BOCHA_API_KEYS }}
-          TAVILY_API_KEYS: ${{ secrets.TAVILY_API_KEYS }}
-          SERPAPI_API_KEYS: ${{ secrets.SERPAPI_API_KEYS }}
-          
           # 通知渠道
           WECHAT_WEBHOOK_URL: ${{ secrets.WECHAT_WEBHOOK }}
-          WECHAT_MSG_TYPE: ${{ vars.WECHAT_MSG_TYPE || 'markdown' }}
-          
-          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
-          
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TELEGRAM_MESSAGE_THREAD_ID: ${{ secrets.TELEGRAM_MESSAGE_THREAD_ID }}
-          
-          EMAIL_SENDER: ${{ vars.EMAIL_SENDER || secrets.EMAIL_SENDER }}
-          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-          EMAIL_RECEIVERS: ${{ vars.EMAIL_RECEIVERS || secrets.EMAIL_RECEIVERS }}
-          EMAIL_SENDER_NAME: ${{ vars.EMAIL_SENDER_NAME || 'daily_stock_analysis股票分析助手' }}
-          
-          PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
-          PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
-          
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-          
-          CUSTOM_WEBHOOK_URLS: ${{ secrets.CUSTOM_WEBHOOK_URLS }}
-          CUSTOM_WEBHOOK_BEARER_TOKEN: ${{ secrets.CUSTOM_WEBHOOK_BEARER_TOKEN }}
-          
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-          DISCORD_MAIN_CHANNEL_ID: ${{ secrets.DISCORD_MAIN_CHANNEL_ID }}
-          
-          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
-          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
-          FEISHU_FOLDER_TOKEN: ${{ secrets.FEISHU_FOLDER_TOKEN }}
-
-          ASTRBOT_URL: ${{ secrets.ASTRBOT_URL }}
-          ASTRBOT_TOKEN: ${{ secrets.ASTRBOT_TOKEN }}
-
-          SERVERCHAN3_SENDKEY: ${{ secrets.SERVERCHAN3_SENDKEY }}
-          
-          # 自选股
-          STOCK_LIST: ${{ vars.STOCK_LIST || secrets.STOCK_LIST || '600519' }}
-          
+          # 自选股配置
+          STOCK_LIST: ${{ vars.STOCK_LIST || '600519' }}
           # 运行配置
           REPORT_TYPE: ${{ vars.REPORT_TYPE || 'simple' }}
-          SINGLE_STOCK_NOTIFY: ${{ vars.SINGLE_STOCK_NOTIFY || 'false' }}
-          MARKET_REVIEW_ENABLED: ${{ vars.MARKET_REVIEW_ENABLED || 'true' }}
-          ANALYSIS_DELAY: ${{ vars.ANALYSIS_DELAY || '0' }}
-          
-          # 系统配置
-          LOG_LEVEL: INFO
-          MAX_WORKERS: ${{ vars.MAX_WORKERS || '1' }}
-          ENABLE_CHIP_DISTRIBUTION: 'false'
-          REALTIME_SOURCE_PRIORITY: ${{ vars.REALTIME_SOURCE_PRIORITY || 'tencent,akshare_sina,efinance,akshare_em' }}
-          
+          REALTIME_SOURCE_PRIORITY: 'tencent,akshare_sina,efinance'
+
         run: |
-          # 设置时区为上海
-          export TZ="Asia/Shanghai"
           MODE="${{ github.event.inputs.mode || 'full' }}"
-          
           echo "=========================================="
           echo "🚀 A股自选股智能分析系统"
           echo "=========================================="
-          echo "⏰ 时间: $(date '+%Y-%m-%d %H:%M:%S')"
+          echo "⏰ 北京时间: $(date '+%Y-%m-%d %H:%M:%S')"
           echo "🎯 运行模式: $MODE"
           echo "📊 自选股: $STOCK_LIST"
-          echo "📝 报告类型: $REPORT_TYPE"
-          
-          echo -e "\n=========================================="
-          echo "📋 配置检查"
-          echo "=========================================="
-          echo "【AI 配置】"
-          echo "  Gemini API Key: $([ -n "$GEMINI_API_KEY" ] && echo '✅ 已配置' || echo '❌ 未配置')"
-          echo "  OpenAI API Key: $([ -n "$OPENAI_API_KEY" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
-          
-          echo -e "\n【搜索引擎】"
-          echo "  Bocha: $([ -n "$BOCHA_API_KEYS" ] && echo '✅' || echo '⚪')"
-          echo "  Tavily: $([ -n "$TAVILY_API_KEYS" ] && echo '✅' || echo '⚪')"
-          
-          echo -e "\n【通知渠道】"
-          echo "  PushPlus: $([ -n "$PUSHPLUS_TOKEN" ] && echo '✅' || echo '⚪')"
-          echo "  企业微信: $([ -n "$WECHAT_WEBHOOK_URL" ] && echo '✅' || echo '⚪')"
-          echo "  飞书: $([ -n "$FEISHU_WEBHOOK_URL" ] && echo '✅' || echo '⚪')"
-          echo "  Telegram: $([ -n "$TELEGRAM_BOT_TOKEN" ] && echo '✅' || echo '⚪')"
-          echo "=========================================="
           
           # 执行主程序
           if [ "$MODE" = "market-only" ]; then
@@ -162,8 +85,8 @@ jobs:
           else
             python main.py
           fi
-      
-      - name: 上传报告与日志
+
+      - name: 上传分析报告
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -172,19 +95,19 @@ jobs:
             reports/
             logs/
           retention-days: 30
-      
-      - name: 运行结果展示
+
+      - name: 显示运行结果
         if: always()
         run: |
-          echo -e "\n=========================================="
+          echo ""
+          echo "=========================================="
           echo "📊 分析完成"
           echo "=========================================="
           if [ -d "reports" ] && [ "$(ls -A reports 2>/dev/null)" ]; then
-            echo "生成报告："
+            echo "生成的报告:"
             ls -la reports/
           else
-            echo "⚠️ 未生成报告"
+            echo "⚠️ 未生成报告文件"
           fi
-          
-          echo -e "\n📜 最新日志（最后30行）："
+          echo ""
           tail -30 logs/stock_analysis_*.log 2>/dev/null || echo "无日志文件"
